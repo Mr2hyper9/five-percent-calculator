@@ -103,6 +103,15 @@ function getTithingAmount(enabled, payoutUsed) {
   return enabled ? Math.max(0, payoutUsed) * 0.1 : 0;
 }
 
+function getAvailableTotalSurplus(monthlyIncome, otherIncome, monthlyNetAfterTax, baseExpenses, payoutUsed, tithing) {
+  return Math.max(0, monthlyIncome + otherIncome + monthlyNetAfterTax - baseExpenses - payoutUsed - tithing);
+}
+
+function getTotalSurplusReinvestment(availableTotalSurplus, percent) {
+  const pct = clamp(toNum(percent), 0, 100) / 100;
+  return Math.min(Math.max(0, availableTotalSurplus), Math.max(0, availableTotalSurplus) * pct);
+}
+
 function Card({ children }) {
   return <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">{children}</div>;
 }
@@ -178,6 +187,18 @@ function runCalculatorTests() {
 
   const testSeven = getTithingAmount(false, 500);
   console.assert(Math.abs(testSeven) < 0.001, "Test failed: disabled tithing should be zero");
+
+  const exampleAAvailable = getAvailableTotalSurplus(3000, 0, 500, 2000, 200, 20);
+  console.assert(Math.abs(exampleAAvailable - 1280) < 0.001, "Test failed: Example A available surplus should be 1280");
+
+  const exampleAReinvest = getTotalSurplusReinvestment(exampleAAvailable, 50);
+  console.assert(Math.abs(exampleAReinvest - 640) < 0.001, "Test failed: Example A reinvestment should be 640");
+
+  const exampleBNegative = getAvailableTotalSurplus(1000, 0, 100, 2000, 50, 5);
+  console.assert(Math.abs(exampleBNegative) < 0.001, "Test failed: Example B negative surplus should be clamped to 0");
+
+  const exampleCReinvest = getTotalSurplusReinvestment(1280, 150);
+  console.assert(Math.abs(exampleCReinvest - 1280) < 0.001, "Test failed: Example C percentage above 100 should be treated as 100");
 }
 
 runCalculatorTests();
@@ -311,6 +332,11 @@ export default function FinancialOverview() {
       case "reinvest_pct_of_payout": {
         const targetFromPayout = monthlyNetAfterTax * pctTarget;
         return { toReinvest: Math.min(leftoverFromPayout, Math.max(0, targetFromPayout)), useFromPayout };
+      }
+      case "reinvest_pct_of_total_surplus": {
+        const payoutTithing = getTithingAmount(tithingEnabled, useFromPayout);
+        const availableTotalSurplus = getAvailableTotalSurplus(monthlyIncome, otherIncome, monthlyNetAfterTax, baseExpenses, useFromPayout, payoutTithing);
+        return { toReinvest: getTotalSurplusReinvestment(availableTotalSurplus, pctTarget * 100), useFromPayout };
       }
       default:
         return { toReinvest: 0, useFromPayout };
@@ -747,6 +773,7 @@ export default function FinancialOverview() {
                     <option value="reinvest_all_total">Reinvest all surplus, payout and income</option>
                     <option value="reinvest_fixed">Reinvest fixed amount each month</option>
                     <option value="reinvest_pct_of_payout">Reinvest percentage of payout</option>
+                    <option value="reinvest_pct_of_total_surplus">Reinvest X% of all total surplus</option>
                   </SelectBox>
 
                   {reinvestMode === "reinvest_fixed" && (
@@ -756,9 +783,9 @@ export default function FinancialOverview() {
                     </div>
                   )}
 
-                  {reinvestMode === "reinvest_pct_of_payout" && (
+                  {(reinvestMode === "reinvest_pct_of_payout" || reinvestMode === "reinvest_pct_of_total_surplus") && (
                     <div>
-                      <Label>Percent of payout to reinvest</Label>
+                      <Label>{reinvestMode === "reinvest_pct_of_total_surplus" ? "Percent of total surplus to reinvest" : "Percent of payout to reinvest"}</Label>
                       <Input type="number" value={reinvestPctStr} placeholder="0 to 100" onChange={(e) => setReinvestPctStr(e.target.value)} />
                     </div>
                   )}
