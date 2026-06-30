@@ -26,8 +26,8 @@ export default function Root() {
       <header className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm md:px-6">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xl font-bold text-slate-950">Financial Calculator Suite</div>
-            <div className="text-sm text-slate-500">5% model and debt payoff planning</div>
+            <div className="text-xl font-bold text-slate-950">Financial Forecasting Suite</div>
+            <div className="text-sm text-slate-500">Investment, debt, and tax forecasting</div>
           </div>
           <nav className="flex flex-wrap gap-2" aria-label="Calculator sections">
             <TabButton active={section === "investment"} onClick={() => setSection("investment")}>
