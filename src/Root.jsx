@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import InvestmentCalculator from "./App.jsx";
+import InvestmentCalculator from "./InvestmentCalculator.jsx";
 import DebtPayoffCalculator from "./DebtPayoffCalculator.jsx";
 import TaxCalculator from "./TaxCalculator.jsx";
 
