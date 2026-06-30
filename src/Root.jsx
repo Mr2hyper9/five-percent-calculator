@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import InvestmentCalculator from "./App.jsx";
 import DebtPayoffCalculator from "./DebtPayoffCalculator.jsx";
+import TaxCalculator from "./TaxCalculator.jsx";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -21,6 +22,10 @@ function TabButton({ active, onClick, children }) {
 export default function Root() {
   const [section, setSection] = useState("investment");
 
+  let activeCalculator = <InvestmentCalculator />;
+  if (section === "debt") activeCalculator = <DebtPayoffCalculator />;
+  if (section === "tax") activeCalculator = <TaxCalculator />;
+
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm md:px-6">
@@ -36,11 +41,14 @@ export default function Root() {
             <TabButton active={section === "debt"} onClick={() => setSection("debt")}>
               Debt Payoff
             </TabButton>
+            <TabButton active={section === "tax"} onClick={() => setSection("tax")}>
+              Tax Calculator
+            </TabButton>
           </nav>
         </div>
       </header>
 
-      {section === "investment" ? <InvestmentCalculator /> : <DebtPayoffCalculator />}
+      {activeCalculator}
     </div>
   );
 }
