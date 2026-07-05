@@ -1,0 +1,316 @@
+name: Apply monthly simulation fix
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/apply-monthly-simulation-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-monthly-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Apply monthly reinvestment and laddering fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          source_path = Path("src/InvestmentCalculator.jsx")
+          text = source_path.read_text()
+
+          payout_block = '''  const activePrincipalForPayout = useMemo(() => {
+            if (!ladderEnabled || !ladderState) return principal;
+            return ladderState.contracts.reduce(
+              (sum, contract) => sum + Math.max(0, toNum(contract.principal)),
+              0
+            );
+          }, [ladderEnabled, ladderState, principal]);
+
+          const payoutNow = useMemo(
+            () =>
+              monthlyPayoutAfterTax(
+                activePrincipalForPayout,
+                monthlyRate,
+                filingStatus,
+                monthlyIncome,
+                otherIncome,
+                stateTaxEnabled,
+                stateTaxPct,
+                useManualTaxRate,
+                manualTaxRatePct
+              ),
+            [
+              activePrincipalForPayout,
+              monthlyRate,
+              filingStatus,
+              monthlyIncome,
+              otherIncome,
+              stateTaxEnabled,
+              stateTaxPct,
+              useManualTaxRate,
+              manualTaxRatePct
+            ]
+          );'''
+
+          text, count = re.subn(
+              r"  const payoutNow = useMemo\(.*?\n  \);\n\n  const payoutUsedInput",
+              payout_block + "\n\n  const payoutUsedInput",
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise RuntimeError(f"Expected one payout block, replaced {count}")
+
+          monthly_function = '''  function buildMonthlyRows(count) {
+            const safeCount = Math.max(0, Math.floor(toNum(count)));
+            if (safeCount <= 0) return;
+
+            const previousRows = monthlyHistory;
+            const rows = [];
+            const startingMonth = previousRows.length + 1;
+            let currentAvailableMoney =
+              previousRows.length > 0
+                ? previousRows[previousRows.length - 1].currentAvailableMoney
+                : manualBalance !== null
+                  ? manualBalance
+                  : 0;
+
+            let currentPrincipal = Math.max(0, principal);
+            let currentLadderState = null;
+
+            if (ladderEnabled) {
+              currentLadderState = ladderState
+                ? {
+                    savedPool: Math.max(0, ladderState.savedPool || 0),
+                    contracts: ladderState.contracts.map((contract) => ({ ...contract })),
+                    nextId: ladderState.nextId
+                  }
+                : {
+                    savedPool: 0,
+                    contracts: [
+                      {
+                        id: "c_0",
+                        slotMonth: (startingMonth - 1) % 12,
+                        principal: currentPrincipal,
+                        monthsIntoTerm: 0
+                      }
+                    ],
+                    nextId: 1
+                  };
+            }
+
+            for (let index = 0; index < safeCount; index += 1) {
+              const monthNumber = startingMonth + index;
+              const calendarSlot = (monthNumber - 1) % 12;
+              let activePrincipalAtStart = currentPrincipal;
+              let activePrincipalAtEnd = currentPrincipal;
+              let savedPool = 0;
+              let activeContracts = 0;
+              let deployedThisMonth = 0;
+              let renewedThisMonth = false;
+
+              if (ladderEnabled && currentLadderState) {
+                for (const contract of currentLadderState.contracts) {
+                  if (contract.monthsIntoTerm >= 12) {
+                    if (currentLadderState.savedPool > 0) {
+                      contract.principal += currentLadderState.savedPool;
+                      deployedThisMonth += currentLadderState.savedPool;
+                      currentLadderState.savedPool = 0;
+                    }
+                    contract.monthsIntoTerm = 0;
+                    renewedThisMonth = true;
+                  }
+                }
+
+                activePrincipalAtStart = currentLadderState.contracts.reduce(
+                  (sum, contract) => sum + Math.max(0, toNum(contract.principal)),
+                  0
+                );
+              }
+
+              const payout = monthlyPayoutAfterTax(
+                activePrincipalAtStart,
+                monthlyRate,
+                filingStatus,
+                monthlyIncome,
+                otherIncome,
+                stateTaxEnabled,
+                stateTaxPct,
+                useManualTaxRate,
+                manualTaxRatePct
+              );
+              const amounts = getReinvestmentAmounts(payout.netAfterTax);
+              const monthlyTaxes = payout.federalTax + payout.stateTax;
+              const totalIncomeAfterTax = monthlyIncome + otherIncome + payout.netAfterTax;
+              const cashChange =
+                totalIncomeAfterTax -
+                amounts.expenseTotal -
+                amounts.useFromPayout -
+                amounts.toReinvest;
+
+              if (ladderEnabled && currentLadderState) {
+                currentLadderState.savedPool += amounts.toReinvest;
+
+                if (!renewedThisMonth) {
+                  const slotOccupied = currentLadderState.contracts.some(
+                    (contract) => contract.slotMonth === calendarSlot
+                  );
+
+                  if (!slotOccupied && currentLadderState.savedPool >= 10000) {
+                    const newContractPrincipal = currentLadderState.savedPool;
+                    currentLadderState.contracts.push({
+                      id: `c_${currentLadderState.nextId}`,
+                      slotMonth: calendarSlot,
+                      principal: newContractPrincipal,
+                      monthsIntoTerm: 0
+                    });
+                    currentLadderState.nextId += 1;
+                    deployedThisMonth += newContractPrincipal;
+                    currentLadderState.savedPool = 0;
+                  }
+                }
+
+                for (const contract of currentLadderState.contracts) {
+                  contract.monthsIntoTerm += 1;
+                }
+
+                activePrincipalAtEnd = currentLadderState.contracts.reduce(
+                  (sum, contract) => sum + Math.max(0, toNum(contract.principal)),
+                  0
+                );
+                savedPool = currentLadderState.savedPool;
+                activeContracts = currentLadderState.contracts.length;
+                currentPrincipal = activePrincipalAtEnd + savedPool;
+              } else {
+                deployedThisMonth = amounts.toReinvest;
+                currentPrincipal += amounts.toReinvest;
+                activePrincipalAtEnd = currentPrincipal;
+              }
+
+              currentAvailableMoney += cashChange;
+
+              rows.push({
+                month: monthNumber,
+                principal: activePrincipalAtStart,
+                endPrincipal: currentPrincipal,
+                activePrincipalEnd: activePrincipalAtEnd,
+                payoutGross: payout.monthlyPayoutGross,
+                payoutNet: payout.netAfterTax,
+                taxes: monthlyTaxes,
+                payoutUsed: amounts.useFromPayout,
+                expenses: amounts.expenseTotal,
+                reinvested: amounts.toReinvest,
+                deployed: deployedThisMonth,
+                savedPool,
+                activeContracts,
+                ladderEnabled,
+                monthlySurplus: cashChange,
+                currentAvailableMoney
+              });
+            }
+
+            setMonthlyHistory([...previousRows, ...rows]);
+            setPrincipal(currentPrincipal);
+            if (ladderEnabled && currentLadderState) {
+              setLadderState(currentLadderState);
+            }
+          }'''
+
+          text, count = re.subn(
+              r"  function buildMonthlyRows\(count\) \{.*?\n  \}\n\n  function onSimulateNextMonth",
+              monthly_function + "\n\n  function onSimulateNextMonth",
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise RuntimeError(f"Expected one monthly function, replaced {count}")
+
+          old_help = "Monthly mode uses the current principal when you simulate. It does not automatically reinvest or change principal month by month. Percentage expenses automatically update from total income after tax."
+          new_help = "Monthly mode now applies the selected reinvestment strategy every month. Without laddering, reinvested money increases principal immediately. With laddering, it accumulates in the saved pool and deploys into eligible $10,000-plus contract slots or renewals."
+          if old_help not in text:
+              raise RuntimeError("Monthly help text was not found")
+          text = text.replace(old_help, new_help, 1)
+
+          old_table = '''                        <th className="py-2 pr-4">Month</th>
+                        <th className="py-2 pr-4">Principal Used</th>
+                        <th className="py-2 pr-4">Payout Gross</th>
+                        <th className="py-2 pr-4">Taxes</th>
+                        <th className="py-2 pr-4">Payout Net</th>
+                        <th className="py-2 pr-4">Payout Used</th>
+                        <th className="py-2 pr-4">Expenses</th>
+                        <th className="py-2 pr-4">Monthly Surplus</th>
+                        <th className="py-2 pr-4">Current Available Money</th>'''
+          new_table = '''                        <th className="py-2 pr-4">Month</th>
+                        <th className="py-2 pr-4">Active Principal Used</th>
+                        <th className="py-2 pr-4">Payout Gross</th>
+                        <th className="py-2 pr-4">Taxes</th>
+                        <th className="py-2 pr-4">Payout Net</th>
+                        <th className="py-2 pr-4">Payout Used</th>
+                        <th className="py-2 pr-4">Expenses</th>
+                        <th className="py-2 pr-4">Reinvested</th>
+                        <th className="py-2 pr-4">Deployed</th>
+                        <th className="py-2 pr-4">End Total Capital</th>
+                        <th className="py-2 pr-4">Contracts</th>
+                        <th className="py-2 pr-4">Saved Pool</th>
+                        <th className="py-2 pr-4">Cash Change</th>
+                        <th className="py-2 pr-4">Current Available Money</th>'''
+          if old_table not in text:
+              raise RuntimeError("Monthly table header was not found")
+          text = text.replace(old_table, new_table, 1)
+
+          old_row = '''                          <td className="py-2 pr-4">M{row.month}</td>
+                          <td className="py-2 pr-4">{dollars(row.principal)}</td>
+                          <td className="py-2 pr-4">{dollars(row.payoutGross)}</td>
+                          <td className="py-2 pr-4">{dollars(row.taxes)}</td>
+                          <td className="py-2 pr-4">{dollars(row.payoutNet)}</td>
+                          <td className="py-2 pr-4">{dollars(row.payoutUsed)}</td>
+                          <td className="py-2 pr-4">{dollars(row.expenses)}</td>
+                          <td className="py-2 pr-4">{dollars(row.monthlySurplus)}</td>
+                          <td className="py-2 pr-4">
+                            {dollars(row.currentAvailableMoney)}
+                          </td>'''
+          new_row = '''                          <td className="py-2 pr-4">M{row.month}</td>
+                          <td className="py-2 pr-4">{dollars(row.principal)}</td>
+                          <td className="py-2 pr-4">{dollars(row.payoutGross)}</td>
+                          <td className="py-2 pr-4">{dollars(row.taxes)}</td>
+                          <td className="py-2 pr-4">{dollars(row.payoutNet)}</td>
+                          <td className="py-2 pr-4">{dollars(row.payoutUsed)}</td>
+                          <td className="py-2 pr-4">{dollars(row.expenses)}</td>
+                          <td className="py-2 pr-4">{dollars(row.reinvested)}</td>
+                          <td className="py-2 pr-4">{dollars(row.deployed)}</td>
+                          <td className="py-2 pr-4">{dollars(row.endPrincipal)}</td>
+                          <td className="py-2 pr-4">
+                            {row.ladderEnabled ? row.activeContracts : "-"}
+                          </td>
+                          <td className="py-2 pr-4">{dollars(row.savedPool)}</td>
+                          <td className="py-2 pr-4">{dollars(row.monthlySurplus)}</td>
+                          <td className="py-2 pr-4">
+                            {dollars(row.currentAvailableMoney)}
+                          </td>'''
+          if old_row not in text:
+              raise RuntimeError("Monthly table row was not found")
+          text = text.replace(old_row, new_row, 1)
+
+          source_path.write_text(text)
+
+          workflow_path = Path(".github/workflows/apply-monthly-simulation-fix.yml")
+          if workflow_path.exists():
+              workflow_path.unlink()
+          PY
+
+      - name: Commit repaired calculator
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/InvestmentCalculator.jsx .github/workflows/apply-monthly-simulation-fix.yml
+          git commit -m "Fix monthly reinvestment and contract laddering"
+          git push
