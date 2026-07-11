@@ -1,1 +1,1 @@
-export { default } from "./InvestmentCalculatorV2.jsx";
+export { default } from "./InvestmentCalculatorV3.jsx";
