@@ -23,6 +23,35 @@ const marriedBrackets = [
   { upTo: Infinity, rate: 0.37 }
 ];
 
+const marriedSeparateBrackets = [
+  { upTo: 11600, rate: 0.1 },
+  { upTo: 47150, rate: 0.12 },
+  { upTo: 100525, rate: 0.22 },
+  { upTo: 191950, rate: 0.24 },
+  { upTo: 243725, rate: 0.32 },
+  { upTo: 365600, rate: 0.35 },
+  { upTo: Infinity, rate: 0.37 }
+];
+
+const headOfHouseholdBrackets = [
+  { upTo: 16550, rate: 0.1 },
+  { upTo: 63100, rate: 0.12 },
+  { upTo: 100500, rate: 0.22 },
+  { upTo: 191950, rate: 0.24 },
+  { upTo: 243700, rate: 0.32 },
+  { upTo: 609350, rate: 0.35 },
+  { upTo: Infinity, rate: 0.37 }
+];
+
+const FILING_STATUS_CONFIG = {
+  single: { brackets: singleBrackets, standardDeduction: 14600 },
+  married_joint: { brackets: marriedBrackets, standardDeduction: 29200 },
+  married: { brackets: marriedBrackets, standardDeduction: 29200 },
+  married_separate: { brackets: marriedSeparateBrackets, standardDeduction: 14600 },
+  head_household: { brackets: headOfHouseholdBrackets, standardDeduction: 21900 },
+  surviving_spouse: { brackets: marriedBrackets, standardDeduction: 29200 }
+};
+
 const DEFAULT_EXPENSES = [
   { id: "rent", name: "rent", mode: "fixed", amount: "" },
   { id: "utilities", name: "utilities", mode: "fixed", amount: "" },
@@ -54,13 +83,17 @@ function dollars(number) {
   });
 }
 
+function getFilingStatusConfig(filingStatus) {
+  return FILING_STATUS_CONFIG[filingStatus] || FILING_STATUS_CONFIG.single;
+}
+
 function getMarginalTaxRate(taxableIncome, filingStatus) {
-  const brackets = filingStatus === "married" ? marriedBrackets : singleBrackets;
+  const { brackets } = getFilingStatusConfig(filingStatus);
   return brackets.find((bracket) => taxableIncome <= bracket.upTo)?.rate ?? 0.37;
 }
 
 function standardDeductionFor(filingStatus) {
-  return filingStatus === "married" ? 29200 : 14600;
+  return getFilingStatusConfig(filingStatus).standardDeduction;
 }
 
 function monthlyPayoutAfterTax(
@@ -696,7 +729,10 @@ export default function InvestmentCalculatorV3() {
                   <Label>Filing status</Label>
                   <SelectBox value={filingStatus} onChange={setFilingStatus}>
                     <option value="single">Single</option>
-                    <option value="married">Married Filing Jointly</option>
+                    <option value="married_joint">Married Filing Jointly</option>
+                    <option value="married_separate">Married Filing Separately</option>
+                    <option value="head_household">Head of Household</option>
+                    <option value="surviving_spouse">Qualifying Surviving Spouse</option>
                   </SelectBox>
 
                   <div className="flex items-center gap-2 pt-2">
