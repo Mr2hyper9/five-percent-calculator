@@ -1,0 +1,130 @@
+name: Update 2026 federal tax values
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/update-2026-tax-values-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  update-tax-values:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Update calculators to official 2026 federal values
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          investment_path = Path("src/InvestmentCalculatorV3.jsx")
+          text = investment_path.read_text()
+          lines = text.splitlines()
+
+          def replace_array_block(name, new_block):
+              global lines
+              start = next(i for i, line in enumerate(lines) if line.startswith(f"const {name} = ["))
+              end = next(i for i in range(start + 1, len(lines)) if lines[i] == "];")
+              lines[start:end + 1] = new_block.strip("\n").splitlines()
+
+          replace_array_block("singleBrackets", '''
+          const singleBrackets = [
+            { upTo: 12400, rate: 0.1 },
+            { upTo: 50400, rate: 0.12 },
+            { upTo: 105700, rate: 0.22 },
+            { upTo: 201775, rate: 0.24 },
+            { upTo: 256225, rate: 0.32 },
+            { upTo: 640600, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+          ''')
+
+          replace_array_block("marriedBrackets", '''
+          const marriedBrackets = [
+            { upTo: 24800, rate: 0.1 },
+            { upTo: 100800, rate: 0.12 },
+            { upTo: 211400, rate: 0.22 },
+            { upTo: 403550, rate: 0.24 },
+            { upTo: 512450, rate: 0.32 },
+            { upTo: 768700, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+          ''')
+
+          replace_array_block("marriedSeparateBrackets", '''
+          const marriedSeparateBrackets = [
+            { upTo: 12400, rate: 0.1 },
+            { upTo: 50400, rate: 0.12 },
+            { upTo: 105700, rate: 0.22 },
+            { upTo: 201775, rate: 0.24 },
+            { upTo: 256225, rate: 0.32 },
+            { upTo: 384350, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+          ''')
+
+          replace_array_block("headOfHouseholdBrackets", '''
+          const headOfHouseholdBrackets = [
+            { upTo: 17700, rate: 0.1 },
+            { upTo: 67450, rate: 0.12 },
+            { upTo: 105700, rate: 0.22 },
+            { upTo: 201750, rate: 0.24 },
+            { upTo: 256200, rate: 0.32 },
+            { upTo: 640600, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+          ''')
+
+          start = next(i for i, line in enumerate(lines) if line.startswith("const FILING_STATUS_CONFIG = {"))
+          end = next(i for i in range(start + 1, len(lines)) if lines[i] == "};")
+          lines[start:end + 1] = '''const FILING_STATUS_CONFIG = {
+            single: { brackets: singleBrackets, standardDeduction: 16100 },
+            married_joint: { brackets: marriedBrackets, standardDeduction: 32200 },
+            married: { brackets: marriedBrackets, standardDeduction: 32200 },
+            married_separate: { brackets: marriedSeparateBrackets, standardDeduction: 16100 },
+            head_household: { brackets: headOfHouseholdBrackets, standardDeduction: 24150 },
+            surviving_spouse: { brackets: marriedBrackets, standardDeduction: 32200 }
+          };'''.splitlines()
+
+          if not any("FEDERAL_TAX_YEAR" in line for line in lines):
+              insert_at = next(i for i, line in enumerate(lines) if line.startswith("const MINIMUM_NEW_CONTRACT")) + 1
+              lines.insert(insert_at, "const FEDERAL_TAX_YEAR = 2026;")
+
+          label_index = next(i for i, line in enumerate(lines) if "<Label>Filing status</Label>" in line)
+          note = '                  <div className="text-xs text-slate-500">Using official 2026 federal brackets and standard deduction.</div>'
+          if note not in lines:
+              lines.insert(label_index + 1, note)
+
+          investment_path.write_text("\n".join(lines) + "\n")
+
+          tax_path = Path("src/TaxCalculator.jsx")
+          tax_text = tax_path.read_text()
+          tax_text = tax_text.replace(
+              "hoh: brackets([17700, 67550, 105700, 201750, 256200, 640600]",
+              "hoh: brackets([17700, 67450, 105700, 201750, 256200, 640600]"
+          )
+          tax_text = tax_text.replace(
+              "IRS 2026 rates, manually entered from official IRS OBBB inflation-adjustment release. Long-term capital gain brackets are carried forward as placeholder data until verified.",
+              "IRS 2026 ordinary brackets and standard deductions from official IRS inflation-adjustment guidance. Long-term capital gain brackets remain placeholder data until separately verified."
+          )
+          tax_path.write_text(tax_text)
+          PY
+
+      - name: Verify production build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit 2026 tax data update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/InvestmentCalculatorV3.jsx src/TaxCalculator.jsx
+          git commit -m "Update federal tax brackets and deductions to 2026"
+          git push
