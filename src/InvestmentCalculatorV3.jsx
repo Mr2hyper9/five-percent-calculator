@@ -2,54 +2,55 @@ import React, { useMemo, useState } from "react";
 
 const FEDERAL_RATES = [10, 12, 22, 24, 32, 35, 37];
 const MINIMUM_NEW_CONTRACT = 10000;
+const FEDERAL_TAX_YEAR = 2026;
 
 const singleBrackets = [
-  { upTo: 11600, rate: 0.1 },
-  { upTo: 47150, rate: 0.12 },
-  { upTo: 100525, rate: 0.22 },
-  { upTo: 191950, rate: 0.24 },
-  { upTo: 243725, rate: 0.32 },
-  { upTo: 609350, rate: 0.35 },
+  { upTo: 12400, rate: 0.1 },
+  { upTo: 50400, rate: 0.12 },
+  { upTo: 105700, rate: 0.22 },
+  { upTo: 201775, rate: 0.24 },
+  { upTo: 256225, rate: 0.32 },
+  { upTo: 640600, rate: 0.35 },
   { upTo: Infinity, rate: 0.37 }
 ];
 
 const marriedBrackets = [
-  { upTo: 23200, rate: 0.1 },
-  { upTo: 94300, rate: 0.12 },
-  { upTo: 201050, rate: 0.22 },
-  { upTo: 383900, rate: 0.24 },
-  { upTo: 487450, rate: 0.32 },
-  { upTo: 731200, rate: 0.35 },
+  { upTo: 24800, rate: 0.1 },
+  { upTo: 100800, rate: 0.12 },
+  { upTo: 211400, rate: 0.22 },
+  { upTo: 403550, rate: 0.24 },
+  { upTo: 512450, rate: 0.32 },
+  { upTo: 768700, rate: 0.35 },
   { upTo: Infinity, rate: 0.37 }
 ];
 
 const marriedSeparateBrackets = [
-  { upTo: 11600, rate: 0.1 },
-  { upTo: 47150, rate: 0.12 },
-  { upTo: 100525, rate: 0.22 },
-  { upTo: 191950, rate: 0.24 },
-  { upTo: 243725, rate: 0.32 },
-  { upTo: 365600, rate: 0.35 },
+  { upTo: 12400, rate: 0.1 },
+  { upTo: 50400, rate: 0.12 },
+  { upTo: 105700, rate: 0.22 },
+  { upTo: 201775, rate: 0.24 },
+  { upTo: 256225, rate: 0.32 },
+  { upTo: 384350, rate: 0.35 },
   { upTo: Infinity, rate: 0.37 }
 ];
 
 const headOfHouseholdBrackets = [
-  { upTo: 16550, rate: 0.1 },
-  { upTo: 63100, rate: 0.12 },
-  { upTo: 100500, rate: 0.22 },
-  { upTo: 191950, rate: 0.24 },
-  { upTo: 243700, rate: 0.32 },
-  { upTo: 609350, rate: 0.35 },
+  { upTo: 17700, rate: 0.1 },
+  { upTo: 67450, rate: 0.12 },
+  { upTo: 105700, rate: 0.22 },
+  { upTo: 201750, rate: 0.24 },
+  { upTo: 256200, rate: 0.32 },
+  { upTo: 640600, rate: 0.35 },
   { upTo: Infinity, rate: 0.37 }
 ];
 
 const FILING_STATUS_CONFIG = {
-  single: { brackets: singleBrackets, standardDeduction: 14600 },
-  married_joint: { brackets: marriedBrackets, standardDeduction: 29200 },
-  married: { brackets: marriedBrackets, standardDeduction: 29200 },
-  married_separate: { brackets: marriedSeparateBrackets, standardDeduction: 14600 },
-  head_household: { brackets: headOfHouseholdBrackets, standardDeduction: 21900 },
-  surviving_spouse: { brackets: marriedBrackets, standardDeduction: 29200 }
+  single: { brackets: singleBrackets, standardDeduction: 16100 },
+  married_joint: { brackets: marriedBrackets, standardDeduction: 32200 },
+  married: { brackets: marriedBrackets, standardDeduction: 32200 },
+  married_separate: { brackets: marriedSeparateBrackets, standardDeduction: 16100 },
+  head_household: { brackets: headOfHouseholdBrackets, standardDeduction: 24150 },
+  surviving_spouse: { brackets: marriedBrackets, standardDeduction: 32200 }
 };
 
 const DEFAULT_EXPENSES = [
@@ -727,6 +728,7 @@ export default function InvestmentCalculatorV3() {
                   <Input type="number" value={monthlyRatePct} onChange={(event) => setMonthlyRatePct(Number(event.target.value) || 0)} />
 
                   <Label>Filing status</Label>
+                  <div className="text-xs text-slate-500">Using official 2026 federal brackets and standard deduction.</div>
                   <SelectBox value={filingStatus} onChange={setFilingStatus}>
                     <option value="single">Single</option>
                     <option value="married_joint">Married Filing Jointly</option>
