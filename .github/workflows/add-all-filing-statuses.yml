@@ -1,6 +1,6 @@
 name: Add all federal filing statuses
 
-# This second workflow-file commit triggers the one-time updater.
+# This branch change is merged through a pull request so GitHub runs the existing workflow.
 on:
   push:
     branches: [master]
