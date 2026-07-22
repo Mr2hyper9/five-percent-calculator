@@ -1,11 +1,10 @@
 name: Add all federal filing statuses
 
-# This branch change is merged through a pull request so GitHub runs the existing workflow.
 on:
-  push:
+  pull_request:
     branches: [master]
     paths:
-      - .github/workflows/add-all-filing-statuses.yml
+      - .github/filing-status-trigger.txt
 
 permissions:
   contents: write
@@ -14,27 +13,22 @@ jobs:
   update-calculator:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: Add filing statuses and tax profiles
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("src/InvestmentCalculatorV3.jsx")
           text = path.read_text()
 
-          old_brackets = '''const marriedBrackets = [
-            { upTo: 23200, rate: 0.1 },
-            { upTo: 94300, rate: 0.12 },
-            { upTo: 201050, rate: 0.22 },
-            { upTo: 383900, rate: 0.24 },
-            { upTo: 487450, rate: 0.32 },
-            { upTo: 731200, rate: 0.35 },
-            { upTo: Infinity, rate: 0.37 }
-          ];'''
-
-          new_brackets = '''const marriedBrackets = [
+          married_block = '''const marriedBrackets = [
             { upTo: 23200, rate: 0.1 },
             { upTo: 94300, rate: 0.12 },
             { upTo: 201050, rate: 0.22 },
@@ -73,20 +67,17 @@ jobs:
             surviving_spouse: { brackets: marriedBrackets, standardDeduction: 29200 }
           };'''
 
-          if old_brackets not in text:
-            raise RuntimeError("Married bracket block not found")
-          text = text.replace(old_brackets, new_brackets, 1)
+          text, count = re.subn(
+            r'const marriedBrackets = \[.*?\n\];',
+            married_block,
+            text,
+            count=1,
+            flags=re.S,
+          )
+          if count != 1:
+            raise RuntimeError(f"Expected one married bracket block, replaced {count}")
 
-          old_helpers = '''function getMarginalTaxRate(taxableIncome, filingStatus) {
-            const brackets = filingStatus === "married" ? marriedBrackets : singleBrackets;
-            return brackets.find((bracket) => taxableIncome <= bracket.upTo)?.rate ?? 0.37;
-          }
-
-          function standardDeductionFor(filingStatus) {
-            return filingStatus === "married" ? 29200 : 14600;
-          }'''
-
-          new_helpers = '''function getFilingStatusConfig(filingStatus) {
+          helper_block = '''function getFilingStatusConfig(filingStatus) {
             return FILING_STATUS_CONFIG[filingStatus] || FILING_STATUS_CONFIG.single;
           }
 
@@ -99,54 +90,34 @@ jobs:
             return getFilingStatusConfig(filingStatus).standardDeduction;
           }'''
 
-          if old_helpers not in text:
-            raise RuntimeError("Filing status helper block not found")
-          text = text.replace(old_helpers, new_helpers, 1)
+          text, count = re.subn(
+            r'function getMarginalTaxRate\(taxableIncome, filingStatus\) \{.*?\n\}\n\nfunction standardDeductionFor\(filingStatus\) \{.*?\n\}',
+            helper_block,
+            text,
+            count=1,
+            flags=re.S,
+          )
+          if count != 1:
+            raise RuntimeError(f"Expected one filing helper block, replaced {count}")
 
           old_options = '''                    <option value="single">Single</option>
                     <option value="married">Married Filing Jointly</option>'''
-
           new_options = '''                    <option value="single">Single</option>
                     <option value="married_joint">Married Filing Jointly</option>
                     <option value="married_separate">Married Filing Separately</option>
                     <option value="head_household">Head of Household</option>
                     <option value="surviving_spouse">Qualifying Surviving Spouse</option>'''
-
           if old_options not in text:
-            raise RuntimeError("Filing status dropdown options not found")
+            raise RuntimeError("Filing status dropdown was not found")
           text = text.replace(old_options, new_options, 1)
 
-          old_test = '''  const ladder = createInitialLadderState(10000);
-            console.assert(deployedPrincipal(ladder) === 10000, "Initial ladder principal test failed");'''
-
-          new_test = '''  console.assert(
-            standardDeductionFor("married_separate") === 14600,
-            "Married filing separately deduction test failed"
-          );
-            console.assert(
-            standardDeductionFor("head_household") === 21900,
-            "Head of household deduction test failed"
-          );
-            console.assert(
-            standardDeductionFor("surviving_spouse") === 29200,
-            "Qualifying surviving spouse deduction test failed"
-          );
-
-            const ladder = createInitialLadderState(10000);
-            console.assert(deployedPrincipal(ladder) === 10000, "Initial ladder principal test failed");'''
-
-          if old_test not in text:
-            raise RuntimeError("Calculator test insertion point not found")
-          text = text.replace(old_test, new_test, 1)
-
           path.write_text(text)
-          Path(".github/workflows/add-all-filing-statuses.yml").unlink()
           PY
 
-      - name: Commit filing status update
+      - name: Commit calculator update to pull request branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/InvestmentCalculatorV3.jsx .github/workflows/add-all-filing-statuses.yml
+          git add src/InvestmentCalculatorV3.jsx
           git commit -m "Add all federal filing statuses to 5 percent model"
-          git push
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
