@@ -25,18 +25,26 @@ jobs:
           from pathlib import Path
 
           path = Path("src/InvestmentCalculatorV3.jsx")
-          text = path.read_text()
+          lines = path.read_text().splitlines()
 
-          old_brackets = '''const marriedBrackets = [
-            { upTo: 23200, rate: 0.1 },
-            { upTo: 94300, rate: 0.12 },
-            { upTo: 201050, rate: 0.22 },
-            { upTo: 383900, rate: 0.24 },
-            { upTo: 487450, rate: 0.32 },
-            { upTo: 731200, rate: 0.35 },
-            { upTo: Infinity, rate: 0.37 }
-          ];'''
-          new_brackets = '''const marriedBrackets = [
+          def find_line(start, predicate, label):
+            for index in range(start, len(lines)):
+              if predicate(lines[index]):
+                return index
+            raise RuntimeError(f"Could not locate {label}")
+
+          married_start = find_line(
+            0,
+            lambda line: line.strip() == "const marriedBrackets = [",
+            "married tax brackets",
+          )
+          married_end = find_line(
+            married_start + 1,
+            lambda line: line.strip() == "];",
+            "end of married tax brackets",
+          )
+
+          bracket_replacement = '''const marriedBrackets = [
             { upTo: 23200, rate: 0.1 },
             { upTo: 94300, rate: 0.12 },
             { upTo: 201050, rate: 0.22 },
@@ -73,17 +81,26 @@ jobs:
             married_separate: { brackets: marriedSeparateBrackets, standardDeduction: 14600 },
             head_household: { brackets: headOfHouseholdBrackets, standardDeduction: 21900 },
             surviving_spouse: { brackets: marriedBrackets, standardDeduction: 29200 }
-          };'''
+          };'''.splitlines()
+          lines[married_start:married_end + 1] = bracket_replacement
 
-          old_helpers = '''function getMarginalTaxRate(taxableIncome, filingStatus) {
-            const brackets = filingStatus === "married" ? marriedBrackets : singleBrackets;
-            return brackets.find((bracket) => taxableIncome <= bracket.upTo)?.rate ?? 0.37;
-          }
+          marginal_start = find_line(
+            0,
+            lambda line: line.strip().startswith("function getMarginalTaxRate("),
+            "marginal tax helper",
+          )
+          deduction_start = find_line(
+            marginal_start + 1,
+            lambda line: line.strip().startswith("function standardDeductionFor("),
+            "standard deduction helper",
+          )
+          deduction_end = find_line(
+            deduction_start + 1,
+            lambda line: line.strip() == "}",
+            "end of standard deduction helper",
+          )
 
-          function standardDeductionFor(filingStatus) {
-            return filingStatus === "married" ? 29200 : 14600;
-          }'''
-          new_helpers = '''function getFilingStatusConfig(filingStatus) {
+          helper_replacement = '''function getFilingStatusConfig(filingStatus) {
             return FILING_STATUS_CONFIG[filingStatus] || FILING_STATUS_CONFIG.single;
           }
 
@@ -94,26 +111,30 @@ jobs:
 
           function standardDeductionFor(filingStatus) {
             return getFilingStatusConfig(filingStatus).standardDeduction;
-          }'''
+          }'''.splitlines()
+          lines[marginal_start:deduction_end + 1] = helper_replacement
 
-          old_options = '''                    <option value="single">Single</option>
-                    <option value="married">Married Filing Jointly</option>'''
-          new_options = '''                    <option value="single">Single</option>
-                    <option value="married_joint">Married Filing Jointly</option>
-                    <option value="married_separate">Married Filing Separately</option>
-                    <option value="head_household">Head of Household</option>
-                    <option value="surviving_spouse">Qualifying Surviving Spouse</option>'''
+          single_option = find_line(
+            0,
+            lambda line: '<option value="single">Single</option>' in line,
+            "single filing option",
+          )
+          joint_option = find_line(
+            single_option + 1,
+            lambda line: "Married Filing Jointly" in line,
+            "married filing jointly option",
+          )
+          option_indent = lines[single_option][:len(lines[single_option]) - len(lines[single_option].lstrip())]
+          option_replacement = [
+            f'{option_indent}<option value="single">Single</option>',
+            f'{option_indent}<option value="married_joint">Married Filing Jointly</option>',
+            f'{option_indent}<option value="married_separate">Married Filing Separately</option>',
+            f'{option_indent}<option value="head_household">Head of Household</option>',
+            f'{option_indent}<option value="surviving_spouse">Qualifying Surviving Spouse</option>',
+          ]
+          lines[single_option:joint_option + 1] = option_replacement
 
-          for label, old, new in (
-            ("tax brackets", old_brackets, new_brackets),
-            ("tax helpers", old_helpers, new_helpers),
-            ("filing status options", old_options, new_options),
-          ):
-            if old not in text:
-              raise RuntimeError(f"Could not find {label}")
-            text = text.replace(old, new, 1)
-
-          path.write_text(text)
+          path.write_text("\n".join(lines) + "\n")
           PY
 
       - name: Commit calculator update to pull request branch
