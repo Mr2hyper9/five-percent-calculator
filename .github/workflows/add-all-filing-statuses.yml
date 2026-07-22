@@ -1,0 +1,151 @@
+name: Add all federal filing statuses
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/add-all-filing-statuses.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-calculator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add filing statuses and tax profiles
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/InvestmentCalculatorV3.jsx")
+          text = path.read_text()
+
+          old_brackets = '''const marriedBrackets = [
+            { upTo: 23200, rate: 0.1 },
+            { upTo: 94300, rate: 0.12 },
+            { upTo: 201050, rate: 0.22 },
+            { upTo: 383900, rate: 0.24 },
+            { upTo: 487450, rate: 0.32 },
+            { upTo: 731200, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];'''
+
+          new_brackets = '''const marriedBrackets = [
+            { upTo: 23200, rate: 0.1 },
+            { upTo: 94300, rate: 0.12 },
+            { upTo: 201050, rate: 0.22 },
+            { upTo: 383900, rate: 0.24 },
+            { upTo: 487450, rate: 0.32 },
+            { upTo: 731200, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+
+          const marriedSeparateBrackets = [
+            { upTo: 11600, rate: 0.1 },
+            { upTo: 47150, rate: 0.12 },
+            { upTo: 100525, rate: 0.22 },
+            { upTo: 191950, rate: 0.24 },
+            { upTo: 243725, rate: 0.32 },
+            { upTo: 365600, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+
+          const headOfHouseholdBrackets = [
+            { upTo: 16550, rate: 0.1 },
+            { upTo: 63100, rate: 0.12 },
+            { upTo: 100500, rate: 0.22 },
+            { upTo: 191950, rate: 0.24 },
+            { upTo: 243700, rate: 0.32 },
+            { upTo: 609350, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];
+
+          const FILING_STATUS_CONFIG = {
+            single: { brackets: singleBrackets, standardDeduction: 14600 },
+            married_joint: { brackets: marriedBrackets, standardDeduction: 29200 },
+            married: { brackets: marriedBrackets, standardDeduction: 29200 },
+            married_separate: { brackets: marriedSeparateBrackets, standardDeduction: 14600 },
+            head_household: { brackets: headOfHouseholdBrackets, standardDeduction: 21900 },
+            surviving_spouse: { brackets: marriedBrackets, standardDeduction: 29200 }
+          };'''
+
+          if old_brackets not in text:
+            raise RuntimeError("Married bracket block not found")
+          text = text.replace(old_brackets, new_brackets, 1)
+
+          old_helpers = '''function getMarginalTaxRate(taxableIncome, filingStatus) {
+            const brackets = filingStatus === "married" ? marriedBrackets : singleBrackets;
+            return brackets.find((bracket) => taxableIncome <= bracket.upTo)?.rate ?? 0.37;
+          }
+
+          function standardDeductionFor(filingStatus) {
+            return filingStatus === "married" ? 29200 : 14600;
+          }'''
+
+          new_helpers = '''function getFilingStatusConfig(filingStatus) {
+            return FILING_STATUS_CONFIG[filingStatus] || FILING_STATUS_CONFIG.single;
+          }
+
+          function getMarginalTaxRate(taxableIncome, filingStatus) {
+            const { brackets } = getFilingStatusConfig(filingStatus);
+            return brackets.find((bracket) => taxableIncome <= bracket.upTo)?.rate ?? 0.37;
+          }
+
+          function standardDeductionFor(filingStatus) {
+            return getFilingStatusConfig(filingStatus).standardDeduction;
+          }'''
+
+          if old_helpers not in text:
+            raise RuntimeError("Filing status helper block not found")
+          text = text.replace(old_helpers, new_helpers, 1)
+
+          old_options = '''                    <option value="single">Single</option>
+                    <option value="married">Married Filing Jointly</option>'''
+
+          new_options = '''                    <option value="single">Single</option>
+                    <option value="married_joint">Married Filing Jointly</option>
+                    <option value="married_separate">Married Filing Separately</option>
+                    <option value="head_household">Head of Household</option>
+                    <option value="surviving_spouse">Qualifying Surviving Spouse</option>'''
+
+          if old_options not in text:
+            raise RuntimeError("Filing status dropdown options not found")
+          text = text.replace(old_options, new_options, 1)
+
+          old_test = '''  const ladder = createInitialLadderState(10000);
+            console.assert(deployedPrincipal(ladder) === 10000, "Initial ladder principal test failed");'''
+
+          new_test = '''  console.assert(
+            standardDeductionFor("married_separate") === 14600,
+            "Married filing separately deduction test failed"
+          );
+            console.assert(
+            standardDeductionFor("head_household") === 21900,
+            "Head of household deduction test failed"
+          );
+            console.assert(
+            standardDeductionFor("surviving_spouse") === 29200,
+            "Qualifying surviving spouse deduction test failed"
+          );
+
+            const ladder = createInitialLadderState(10000);
+            console.assert(deployedPrincipal(ladder) === 10000, "Initial ladder principal test failed");'''
+
+          if old_test not in text:
+            raise RuntimeError("Calculator test insertion point not found")
+          text = text.replace(old_test, new_test, 1)
+
+          path.write_text(text)
+          Path(".github/workflows/add-all-filing-statuses.yml").unlink()
+          PY
+
+      - name: Commit filing status update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/InvestmentCalculatorV3.jsx .github/workflows/add-all-filing-statuses.yml
+          git commit -m "Add all federal filing statuses to 5 percent model"
+          git push
