@@ -23,12 +23,20 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path("src/InvestmentCalculatorV3.jsx")
           text = path.read_text()
 
-          married_block = '''const marriedBrackets = [
+          old_brackets = '''const marriedBrackets = [
+            { upTo: 23200, rate: 0.1 },
+            { upTo: 94300, rate: 0.12 },
+            { upTo: 201050, rate: 0.22 },
+            { upTo: 383900, rate: 0.24 },
+            { upTo: 487450, rate: 0.32 },
+            { upTo: 731200, rate: 0.35 },
+            { upTo: Infinity, rate: 0.37 }
+          ];'''
+          new_brackets = '''const marriedBrackets = [
             { upTo: 23200, rate: 0.1 },
             { upTo: 94300, rate: 0.12 },
             { upTo: 201050, rate: 0.22 },
@@ -67,17 +75,15 @@ jobs:
             surviving_spouse: { brackets: marriedBrackets, standardDeduction: 29200 }
           };'''
 
-          text, count = re.subn(
-            r'const marriedBrackets = \[.*?\n\];',
-            married_block,
-            text,
-            count=1,
-            flags=re.S,
-          )
-          if count != 1:
-            raise RuntimeError(f"Expected one married bracket block, replaced {count}")
+          old_helpers = '''function getMarginalTaxRate(taxableIncome, filingStatus) {
+            const brackets = filingStatus === "married" ? marriedBrackets : singleBrackets;
+            return brackets.find((bracket) => taxableIncome <= bracket.upTo)?.rate ?? 0.37;
+          }
 
-          helper_block = '''function getFilingStatusConfig(filingStatus) {
+          function standardDeductionFor(filingStatus) {
+            return filingStatus === "married" ? 29200 : 14600;
+          }'''
+          new_helpers = '''function getFilingStatusConfig(filingStatus) {
             return FILING_STATUS_CONFIG[filingStatus] || FILING_STATUS_CONFIG.single;
           }
 
@@ -90,16 +96,6 @@ jobs:
             return getFilingStatusConfig(filingStatus).standardDeduction;
           }'''
 
-          text, count = re.subn(
-            r'function getMarginalTaxRate\(taxableIncome, filingStatus\) \{.*?\n\}\n\nfunction standardDeductionFor\(filingStatus\) \{.*?\n\}',
-            helper_block,
-            text,
-            count=1,
-            flags=re.S,
-          )
-          if count != 1:
-            raise RuntimeError(f"Expected one filing helper block, replaced {count}")
-
           old_options = '''                    <option value="single">Single</option>
                     <option value="married">Married Filing Jointly</option>'''
           new_options = '''                    <option value="single">Single</option>
@@ -107,9 +103,15 @@ jobs:
                     <option value="married_separate">Married Filing Separately</option>
                     <option value="head_household">Head of Household</option>
                     <option value="surviving_spouse">Qualifying Surviving Spouse</option>'''
-          if old_options not in text:
-            raise RuntimeError("Filing status dropdown was not found")
-          text = text.replace(old_options, new_options, 1)
+
+          for label, old, new in (
+            ("tax brackets", old_brackets, new_brackets),
+            ("tax helpers", old_helpers, new_helpers),
+            ("filing status options", old_options, new_options),
+          ):
+            if old not in text:
+              raise RuntimeError(f"Could not find {label}")
+            text = text.replace(old, new, 1)
 
           path.write_text(text)
           PY
