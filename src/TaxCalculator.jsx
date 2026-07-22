@@ -30,14 +30,14 @@ const federalTaxData = {
   },
   2026: {
     year: 2026,
-    sourceLabel: "IRS 2026 rates, manually entered from official IRS OBBB inflation-adjustment release. Long-term capital gain brackets are carried forward as placeholder data until verified.",
+    sourceLabel: "IRS 2026 ordinary brackets and standard deductions from official IRS inflation-adjustment guidance. Long-term capital gain brackets remain placeholder data until separately verified.",
     standardDeduction: { single: 16100, mfj: 32200, mfs: 16100, hoh: 24150, qss: 32200 },
     ordinaryBrackets: {
       single: brackets([12400, 50400, 105700, 201775, 256225, 640600], [0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]),
       mfj: brackets([24800, 100800, 211400, 403550, 512450, 768700], [0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]),
       qss: brackets([24800, 100800, 211400, 403550, 512450, 768700], [0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]),
       mfs: brackets([12400, 50400, 105700, 201775, 256225, 384350], [0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37]),
-      hoh: brackets([17700, 67550, 105700, 201750, 256200, 640600], [0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37])
+      hoh: brackets([17700, 67450, 105700, 201750, 256200, 640600], [0.1, 0.12, 0.22, 0.24, 0.32, 0.35, 0.37])
     },
     ltcgBrackets: {
       single: brackets([48350, 533400], [0, 0.15, 0.2]),
