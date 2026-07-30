@@ -771,6 +771,14 @@ export default function InvestmentCalculatorV3() {
                     <div className="text-slate-500">Monthly Payout After Tax</div>
                     <div className="font-medium">{dollars(payoutNow.netAfterTax)}</div>
                     <div className="text-slate-500">Payout taxes held back: {dollars(autoTaxesOwed)}</div>
+                    {payoutNow.monthlyPayoutGross > 0 && (
+            <div className="my-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <div className="font-semibold">Important Tax Reminder</div>
+              <div className="mt-1">
+                Important: Most people will owe taxes on the income earned from these payouts. Set aside a portion of each payout to help cover your estimated tax liability and avoid an unexpected tax bill.
+              </div>
+            </div>
+          )}
                     <div className="text-slate-500">Federal rate used: {(payoutNow.marginal * 100).toFixed(1)}%</div>
                   </div>
                 </div>
