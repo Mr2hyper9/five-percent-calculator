@@ -1,0 +1,61 @@
+name: Add tax reminder callout
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/tax-reminder-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  add-tax-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Add reminder callout near payout tax estimate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/InvestmentCalculatorV3.jsx")
+          text = path.read_text()
+
+          reminder_text = "Important: Most people will owe taxes on the income earned from these payouts. Set aside a portion of each payout to help cover your estimated tax liability and avoid an unexpected tax bill."
+          if reminder_text not in text:
+              marker = '                    <div className="text-slate-500">Payout taxes held back: {dollars(autoTaxesOwed)}</div>'
+              callout = '''                    {payoutNow.monthlyPayoutGross > 0 && (
+                      <div className="my-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                        <div className="font-semibold">Important Tax Reminder</div>
+                        <div className="mt-1">
+                          Important: Most people will owe taxes on the income earned from these payouts. Set aside a portion of each payout to help cover your estimated tax liability and avoid an unexpected tax bill.
+                        </div>
+                      </div>
+                    )}'''
+              if marker not in text:
+                  raise RuntimeError("Payout tax estimate marker was not found")
+              text = text.replace(marker, marker + "\n" + callout, 1)
+              path.write_text(text)
+          PY
+
+      - name: Verify production build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit reminder update to pull request branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/InvestmentCalculatorV3.jsx
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add important tax reminder callout"
+            git push
+          fi
