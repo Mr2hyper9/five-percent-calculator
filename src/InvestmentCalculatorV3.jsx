@@ -259,11 +259,11 @@ function SelectBox({ value, onChange, children, className = "" }) {
   );
 }
 
-export default function InvestmentCalculatorV3() {
+export default function InvestmentCalculatorV3({ initialDeployedPrincipal = null, onDeployedPrincipalChange = () => {} }) {
   const [activeTab, setActiveTab] = useState("calculator");
   const [simulationMode, setSimulationMode] = useState("yearly");
 
-  const [principal, setPrincipal] = useState(10000);
+  const [principal, setPrincipal] = useState(() => initialDeployedPrincipal ?? 10000);
   const [monthlyRatePct, setMonthlyRatePct] = useState(5);
   const [filingStatus, setFilingStatus] = useState("single");
   const [useManualTaxRate, setUseManualTaxRate] = useState(false);
@@ -644,6 +644,7 @@ export default function InvestmentCalculatorV3() {
 
   function resetCalculator() {
     setPrincipal(10000);
+    onDeployedPrincipalChange(null);
     setMonthlyRatePct(5);
     setFilingStatus("single");
     setUseManualTaxRate(false);
@@ -718,6 +719,9 @@ export default function InvestmentCalculatorV3() {
                     onChange={(event) => {
                       const value = Number(event.target.value) || 0;
                       setPrincipal(value);
+                      onDeployedPrincipalChange(
+                        event.target.value.trim() !== "" && Number.isFinite(value) && value >= 0 ? value : null
+                      );
                       if (ladderEnabled && monthlyHistory.length === 0 && history.length === 0) {
                         setLadderState(createInitialLadderState(value));
                       }
