@@ -1,0 +1,38 @@
+name: Verify Work Optional Calculator
+
+on:
+  push:
+    branches:
+      - master
+      - feature/work-optional-calculator
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify work-optional calculation tests
+        run: npm test
+
+      - name: Lint new work-optional modules
+        run: npx eslint src/WorkOptionalCalculator.jsx src/workOptionalCalculations.js src/workOptionalCalculations.test.js
+
+      - name: Verify production build
+        run: npm run build
