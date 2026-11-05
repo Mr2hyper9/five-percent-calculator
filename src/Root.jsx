@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import InvestmentCalculator from "./InvestmentCalculatorV3.jsx";
 import DebtPayoffCalculator from "./DebtPayoffCalculator.jsx";
 import TaxCalculator from "./TaxCalculator.jsx";
+import WorkOptionalCalculator from "./WorkOptionalCalculator.jsx";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -21,10 +22,19 @@ function TabButton({ active, onClick, children }) {
 
 export default function Root() {
   const [section, setSection] = useState("investment");
+  const [currentDeployedPrincipal, setCurrentDeployedPrincipal] = useState(null);
 
-  let activeCalculator = <InvestmentCalculator />;
+  let activeCalculator = (
+    <InvestmentCalculator
+      initialDeployedPrincipal={currentDeployedPrincipal}
+      onDeployedPrincipalChange={setCurrentDeployedPrincipal}
+    />
+  );
   if (section === "debt") activeCalculator = <DebtPayoffCalculator />;
   if (section === "tax") activeCalculator = <TaxCalculator />;
+  if (section === "work-optional") {
+    activeCalculator = <WorkOptionalCalculator currentDeployedPrincipal={currentDeployedPrincipal} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -32,7 +42,7 @@ export default function Root() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xl font-bold text-slate-950">Financial Forecasting Suite</div>
-            <div className="text-sm text-slate-500">Investment, debt, and tax forecasting</div>
+            <div className="text-sm text-slate-500">Investment, debt, tax, and work-optional forecasting</div>
           </div>
           <nav className="flex flex-wrap gap-2" aria-label="Calculator sections">
             <TabButton active={section === "investment"} onClick={() => setSection("investment")}>
@@ -43,6 +53,9 @@ export default function Root() {
             </TabButton>
             <TabButton active={section === "tax"} onClick={() => setSection("tax")}>
               Tax Calculator
+            </TabButton>
+            <TabButton active={section === "work-optional"} onClick={() => setSection("work-optional")}>
+              Work Optional Calculator
             </TabButton>
           </nav>
         </div>
