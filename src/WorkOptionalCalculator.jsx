@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { calculateWorkOptional, TAX_ASSUMPTION } from "./workOptionalCalculations.js";
 
 const STARTING_INPUTS = {
