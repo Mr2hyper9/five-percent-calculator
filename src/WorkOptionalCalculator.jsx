@@ -1,5 +1,8 @@
-import { useMemo, useState } from "react";
-import { calculateWorkOptional, TAX_ASSUMPTION } from "./workOptionalCalculations.js";
+import { useEffect, useMemo, useState } from "react";
+import { calculateWorkOptional } from "./workOptionalCalculations.js";
+import DetailedTaxInputs from "./WorkOptionalDetailedTaxInputs.jsx";
+import { DEFAULT_DETAILED_INPUTS, DETAILED_DISCLAIMER, SIMPLE_DISCLAIMER } from "./workOptionalDetailedTax.js";
+import { TAX_SOURCES } from "./workOptionalTaxData.js";
 
 const STARTING_INPUTS = {
   monthlyExpenses: "5000",
@@ -8,6 +11,30 @@ const STARTING_INPUTS = {
   otherGrossPassiveIncome: "0",
   bufferPercent: "25"
 };
+
+const PREFERENCES_KEY = "ffs.workOptional.advanced.v1";
+
+function getSavedWorkOptional() {
+  const defaults = { mode: "simple", inputs: STARTING_INPUTS, detailed: DEFAULT_DETAILED_INPUTS };
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return defaults;
+    const stored = JSON.parse(window.localStorage.getItem(PREFERENCES_KEY) || "null");
+    if (!stored || typeof stored !== "object") return defaults;
+    const inputs = { ...STARTING_INPUTS };
+    for (const key of Object.keys(inputs)) {
+      if (typeof stored.inputs?.[key] === "string") inputs[key] = stored.inputs[key];
+    }
+    const detailed = {
+      ...DEFAULT_DETAILED_INPUTS,
+      ...(stored.detailed && typeof stored.detailed === "object" ? stored.detailed : {}),
+      annualIncome: { ...DEFAULT_DETAILED_INPUTS.annualIncome, ...stored.detailed?.annualIncome },
+      continuing: { ...DEFAULT_DETAILED_INPUTS.continuing, ...stored.detailed?.continuing }
+    };
+    return { mode: stored.mode === "detailed" ? "detailed" : "simple", inputs, detailed };
+  } catch {
+    return defaults;
+  }
+}
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -156,7 +183,8 @@ function IncomeBreakdown({ result }) {
         role="img"
         aria-label={
           "Gross monthly payout from the 5% model: " + dollars(result.requiredModelPayout) +
-          ". Other gross passive income: " + dollars(result.otherGrossPassiveIncome) + "."
+          ". Other gross passive income: " + dollars(result.otherGrossPassiveIncome) +
+          ". Additional continuing household income: " + dollars(result.otherContinuingMonthlyIncome || 0) + "."
         }
       >
         {hasGrossIncome && result.requiredModelPayout > 0 && (
@@ -169,6 +197,12 @@ function IncomeBreakdown({ result }) {
           <div
             className="h-full bg-teal-500"
             style={{ width: String(result.otherPassiveSharePercent) + "%" }}
+          />
+        )}
+        {hasGrossIncome && (result.otherContinuingMonthlyIncome || 0) > 0 && (
+          <div
+            className="h-full bg-amber-500"
+            style={{ width: String(result.otherContinuingSharePercent) + "%" }}
           />
         )}
       </div>
@@ -189,11 +223,22 @@ function IncomeBreakdown({ result }) {
           </div>
           <p className="mt-1 text-lg font-semibold tabular-nums text-teal-950">{dollars(result.otherGrossPassiveIncome)}</p>
         </div>
+        {result.taxMode === "detailed" && (
+          <div className="rounded-xl bg-amber-50 p-3 sm:col-span-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+              <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-amber-500" />
+              Additional continuing household income (monthly equivalent)
+            </div>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-amber-950">
+              {dollars(result.otherContinuingMonthlyIncome)}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 divide-y divide-slate-100 border-t border-slate-200">
         <BreakdownRow label="Total projected gross monthly income" value={dollars(result.actualGrossIncome)} important />
-        <BreakdownRow label="Estimated combined federal and state taxes" value={"−" + dollars(result.estimatedMonthlyTaxes)} />
+        <BreakdownRow label={result.taxMode === "detailed" ? "Estimated total monthly federal, state, and payroll taxes" : "Estimated combined federal and state taxes"} value={"−" + dollars(result.estimatedMonthlyTaxes)} />
         <BreakdownRow label="Total projected after-tax income" value={dollars(result.actualNetIncome)} important />
         <BreakdownRow label="Monthly recurring living expenses" value={"−" + dollars(result.monthlyExpenses)} />
         <BreakdownRow label="Required extra income buffer" value={dollars(result.requiredBufferIncome)} />
@@ -208,12 +253,28 @@ function IncomeBreakdown({ result }) {
 }
 
 export default function WorkOptionalCalculator({ currentDeployedPrincipal = null }) {
-  const [inputs, setInputs] = useState(STARTING_INPUTS);
-  const [lastValidBufferPercent, setLastValidBufferPercent] = useState(25);
+  const [saved] = useState(getSavedWorkOptional);
+  const [inputs, setInputs] = useState(saved.inputs);
+  const [taxMode, setTaxMode] = useState(saved.mode);
+  const [detailedInputs, setDetailedInputs] = useState(saved.detailed);
+  const initialBuffer = Number(saved.inputs.bufferPercent);
+  const [lastValidBufferPercent, setLastValidBufferPercent] = useState(
+    Number.isFinite(initialBuffer) && initialBuffer >= 0 && initialBuffer <= 100 ? initialBuffer : 25
+  );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify({
+        mode: taxMode, inputs, detailed: detailedInputs
+      }));
+    } catch {
+      // Browsers that block local storage still have a working in-session form.
+    }
+  }, [taxMode, inputs, detailedInputs]);
 
   const result = useMemo(
-    () => calculateWorkOptional(inputs, currentDeployedPrincipal),
-    [inputs, currentDeployedPrincipal]
+    () => calculateWorkOptional(inputs, currentDeployedPrincipal, { mode: taxMode, detailed: detailedInputs }),
+    [inputs, currentDeployedPrincipal, taxMode, detailedInputs]
   );
 
   function updateInput(key, value) {
@@ -248,6 +309,29 @@ export default function WorkOptionalCalculator({ currentDeployedPrincipal = null
           <div className="space-y-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6" aria-labelledby="work-inputs-heading">
               <h2 id="work-inputs-heading" className="text-lg font-semibold">Your monthly assumptions</h2>
+              <div className="mt-4" role="group" aria-label="Tax estimation mode">
+                <div className="mb-2 text-sm font-semibold text-slate-700">Tax calculation mode</div>
+                <div className="flex w-full max-w-md gap-1 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    aria-pressed={taxMode === "simple"}
+                    onClick={() => setTaxMode("simple")}
+                    className={"min-w-0 flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition " +
+                      (taxMode === "simple" ? "bg-slate-900 text-white shadow-sm" : "text-slate-700 hover:bg-slate-200")}
+                  >
+                    Simple
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={taxMode === "detailed"}
+                    onClick={() => setTaxMode("detailed")}
+                    className={"min-w-0 flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition " +
+                      (taxMode === "detailed" ? "bg-slate-900 text-white shadow-sm" : "text-slate-700 hover:bg-slate-200")}
+                  >
+                    Detailed
+                  </button>
+                </div>
+              </div>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 Change any value to immediately update the funding target. Starting amounts are examples, not saved account data.
               </p>
@@ -261,7 +345,9 @@ export default function WorkOptionalCalculator({ currentDeployedPrincipal = null
                   onChange={(value) => updateInput("monthlyExpenses", value)}
                   error={result.errors.monthlyExpenses}
                 />
-                <NumericField
+                {taxMode === "simple" && (
+                  <>
+                    <NumericField
                   id="federalTaxPercent"
                   label="Federal effective tax rate"
                   description="Estimated effective federal income tax percentage, not your marginal bracket."
@@ -283,6 +369,8 @@ export default function WorkOptionalCalculator({ currentDeployedPrincipal = null
                   <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 sm:col-span-2 lg:col-span-1">
                     {result.errors.combinedTaxRate}
                   </p>
+                )}
+                  </>
                 )}
                 <NumericField
                   id="otherGrossPassiveIncome"
@@ -323,11 +411,31 @@ export default function WorkOptionalCalculator({ currentDeployedPrincipal = null
                   0% covers 100% of expenses. 25% targets 125%. 100% targets 200%.
                 </p>
               </div>
+              {taxMode === "detailed" && (
+                <DetailedTaxInputs
+                  inputs={detailedInputs}
+                  onChange={setDetailedInputs}
+                  errors={result.errors}
+                  otherPassiveAmount={inputs.otherGrossPassiveIncome}
+                />
+              )}
+              <p className="mt-4 text-xs leading-5 text-slate-500">
+                Work Optional assumptions and tax mode are saved in this browser only. 5% Model
+                principal progress still uses explicitly entered principal for this session.
+              </p>
             </section>
 
             <aside className="rounded-2xl border border-slate-200 bg-slate-100 p-5 text-sm leading-6 text-slate-700">
               <h2 className="font-semibold text-slate-900">Tax assumptions</h2>
-              <p className="mt-2">{TAX_ASSUMPTION}</p>
+              <p className="mt-2">{taxMode === "simple" ? SIMPLE_DISCLAIMER : DETAILED_DISCLAIMER}</p>
+              {taxMode === "detailed" && (
+                <p className="mt-3 text-xs leading-5">
+                  Verified sources: <a className="underline" href={detailedInputs.taxYear === "2025" ? TAX_SOURCES.federal2025 : TAX_SOURCES.federal2026} target="_blank" rel="noreferrer">IRS federal tax data</a>
+                  {detailedInputs.state === "AZ" && (
+                    <>{" | "}<a className="underline" href={detailedInputs.taxYear === "2025" ? TAX_SOURCES.arizona2025 : TAX_SOURCES.arizona2026Law} target="_blank" rel="noreferrer">Arizona tax rules</a></>
+                  )}.
+                </p>
+              )}
             </aside>
           </div>
 
@@ -376,7 +484,28 @@ export default function WorkOptionalCalculator({ currentDeployedPrincipal = null
                   <Stat label="Actual projected monthly after-tax income" value={dollars(result.actualNetIncome)} />
                   <Stat label="Extra monthly income above living expenses" value={dollars(result.actualExtraIncome)} />
                   <Stat label="Additional monthly surplus above target" value={dollars(result.monthlySurplus)} />
+                  {taxMode === "detailed" && (
+                    <>
+                      <Stat label="Required annual gross household income" value={dollars(result.annualGrossHouseholdIncome)} />
+                      <Stat label="Annual federal income tax (includes NIIT)" value={dollars(result.annualFederalIncomeTax)} />
+                      <Stat label="Annual state income tax" value={dollars(result.annualStateIncomeTax)} />
+                      <Stat label="Annual payroll and self-employment taxes" value={dollars(result.annualPayrollTaxes)} />
+                      <Stat label="Total estimated annual taxes" value={dollars(result.totalAnnualTaxes)} />
+                      <Stat label="Effective federal income tax rate" value={percent(result.federalEffectivePercent)} />
+                      <Stat label="Effective state income tax rate" value={percent(result.stateEffectivePercent)} />
+                      <Stat label="Federal taxable income (annual)" value={dollars(result.annualTaxableIncome)} />
+                      <Stat label="Arizona taxable income (annual)" value={dollars(result.annualStateTaxableIncome)} />
+                    </>
+                  )}
                 </section>
+                {taxMode === "detailed" && (
+                  <p className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+                    Effective federal and state tax rates are their respective estimated annual income-tax
+                    liabilities divided by <strong>{result.effectiveRateDenominator.toLowerCase()}</strong>.
+                    Payroll and self-employment taxes appear separately and are included in total taxes.
+                    Annual tax liability is recalculated for each potential 5% Model principal.
+                  </p>
+                )}
 
                 <ProgressSection progress={result.progress} />
                 <IncomeBreakdown result={result} />
