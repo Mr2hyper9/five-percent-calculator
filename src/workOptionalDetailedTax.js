@@ -197,9 +197,9 @@ export function calculateFederalTax(buckets, inputs, employmentTaxes) {
     : inputs.itemizedDeduction;
   // The enhanced 65+ deduction under section 151(d)(5)(C) is available in both
   // itemized and standard modes; MFS cannot claim it.
-  const enhancedAllowed = status === "mfs" ? 0 : inputs.seniorCount * year.enhancedSeniorDeduction;
   const enhancedThreshold = status === "mfj" ? 150000 : 75000;
-  const seniorEnhanced = Math.max(0, enhancedAllowed - 0.06 * Math.max(0, federalAGI - enhancedThreshold));
+  const seniorEnhanced = (status === "mfs" ? 0 : inputs.seniorCount) * Math.max(0,
+    year.enhancedSeniorDeduction - 0.06 * Math.max(0, federalAGI - enhancedThreshold));
 
   const taxableIncome = Math.max(0, federalAGI - selectedDeduction - seniorEnhanced);
   const preferenceTaxable = Math.min(buckets.preferential, taxableIncome);
@@ -236,7 +236,9 @@ export function calculateStateTax(buckets, inputs, federal) {
   const stateAGI = Math.max(0, federal.federalAGI - federal.seniorEnhanced);
   const standardCharity = inputs.taxYear === 2025
     ? inputs.charitableContributions * year.charitableStandardPercentage
-    : Math.min(inputs.charitableContributions, inputs.filingStatus === "mfj" ? 2000 : 1000);
+    : Math.min(inputs.charitableContributions,
+        inputs.filingStatus === "mfj" ? 2000 :
+          (inputs.filingStatus === "single" || inputs.filingStatus === "mfs" ? 1000 : 0));
   const stateDeduction = inputs.deductionMethod === "standard"
     ? year.standard[inputs.filingStatus] + standardCharity
     : inputs.arizonaItemizedDeduction;
