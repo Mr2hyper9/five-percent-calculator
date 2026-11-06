@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - feature/work-optional-calculator
+      - feature/advanced-work-optional-tax-2026
   pull_request:
     branches:
       - master
@@ -32,7 +33,7 @@ jobs:
         run: npm test
 
       - name: Lint new work-optional modules
-        run: npx eslint src/WorkOptionalCalculator.jsx src/workOptionalCalculations.js src/workOptionalCalculations.test.js
+        run: npx eslint src/WorkOptionalCalculator.jsx src/WorkOptionalDetailedTaxInputs.jsx src/workOptionalCalculations.js src/workOptionalCalculations.test.js src/workOptionalTaxData.js src/workOptionalDetailedTax.js src/workOptionalDetailedTax.test.js
 
       - name: Verify production build
         run: npm run build
