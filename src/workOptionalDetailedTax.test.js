@@ -309,3 +309,31 @@ test("extreme and malformed amounts never yield NaN or Infinity to the UI", () =
   assert.equal(error.valid, false);
   assert.ok(error.errors.ordinaryIncome);
 });
+
+
+test("joint filers with 2 qualifying seniors phase out each senior's $6,000 independently", () => {
+  const values = validateDetailedInputs(shared, setup({
+    state: "TX", filingStatus: "mfj", seniorCount: "2"
+  })).values;
+  const payroll = { deductibleHalfSeTax: 0 };
+  const f = calculateFederalTax({
+    agi: 178000, ordinary: 178000, preferential: 0, investmentIncome: 0
+  }, values, payroll);
+  near(f.seniorEnhanced, 8640, 1e-8);
+});
+
+test("Arizona 2026 standard charitable enhancement does not assume HOH eligibility", () => {
+  const inputs = validateDetailedInputs(shared, setup({
+    filingStatus: "hoh", state: "AZ", charitableContributions: "1000"
+  })).values;
+  const state = calculateStateTax({}, inputs, { federalAGI: 50000, seniorEnhanced: 0 });
+  assert.equal(state.stateDeduction, ARIZONA_YEARS[2026].standard.hoh);
+});
+
+test("2026 Arizona qualified standard charitable enhancement respects state caps", () => {
+  const mfj = validateDetailedInputs(shared, setup({
+    filingStatus: "mfj", state: "AZ", charitableContributions: "3000"
+  })).values;
+  const state = calculateStateTax({}, mfj, { federalAGI: 50000, seniorEnhanced: 0 });
+  assert.equal(state.stateDeduction, ARIZONA_YEARS[2026].standard.mfj + 2000);
+});
