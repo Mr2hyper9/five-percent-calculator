@@ -255,8 +255,10 @@ export default function DetailedTaxInputs({ inputs, onChange, errors, otherPassi
         basis and excludes future basis exhaustion. This is a supported subset, not a complete
         federal or state return. AMT, QBI, refundable credits (including ACTC/EITC),
         filing-specific eligibility, tax-exempt bond state variations, and unentered
-        adjustments or credits are not calculated. For Arizona 2026, statutory rates and
-        deductions are used, but the final resident return instructions have not been published.
+        adjustments or credits are not calculated. Income classified as ordinary is treated
+        as non-NIIT income and is not assumed to owe self-employment taxes. Arizona family,
+        excise, and specialized credits are not modeled. For Arizona 2026, statutory rates
+        and deductions are used, but the final resident return instructions have not been published.
       </div>
     </section>
   );
