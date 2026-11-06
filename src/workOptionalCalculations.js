@@ -1,3 +1,5 @@
+import { calculateDetailedWorkOptional } from "./workOptionalDetailedTax.js";
+
 export const MONTHLY_MODEL_RATE = 0.05;
 
 export const TAX_ASSUMPTION =
@@ -56,7 +58,10 @@ export function roundUpToCent(value) {
   return Math.ceil(value * 100) / 100;
 }
 
-export function calculateWorkOptional(rawInputs, currentDeployedPrincipal = null) {
+export function calculateWorkOptional(rawInputs, currentDeployedPrincipal = null, options = {}) {
+  if (options.mode === "detailed") {
+    return calculateDetailedWorkOptional(rawInputs, options.detailed, currentDeployedPrincipal);
+  }
   const validation = validateWorkOptionalInputs(rawInputs);
   if (!validation.valid) return { valid: false, errors: validation.errors };
 
